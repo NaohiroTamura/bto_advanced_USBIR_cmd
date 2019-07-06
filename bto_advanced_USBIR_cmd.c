@@ -34,7 +34,7 @@ $ bto_advanced_USBIR_cmd --Plarail_Speed_UpAF
 #include <libusb-1.0/libusb.h>
 #include <getopt.h>
 
-#define APP_VERSION "1.0.0"
+#define APP_VERSION "1.0.1"
 
 #define VENDOR_ID  0x22ea
 #define PRODUCT_ID 0x003a
@@ -50,7 +50,7 @@ typedef unsigned char bool;
 
 #define BUFF_SIZE 64
 #define FORMAT_NUM 4
-#define OPTION_NUM 10
+#define OPTION_NUM 11
 
 #define IR_FREQ_MIN						25000	// 赤外線周波数設定最小値 25KHz
 #define IR_FREQ_MAX						50000	// 赤外線周波数設定最大値 50KHz
@@ -138,6 +138,7 @@ int writeUSBIR_Plarail_Speed_Down(struct libusb_device_handle *devh, uint band);
 int recUSBIRData_Start(struct libusb_device_handle *devh, uint freq);
 int recUSBIRData_Stop(struct libusb_device_handle *devh);
 int readUSBIRData(struct libusb_device_handle *devh, byte data[], uint data_buff_len, uint *bit_len);
+int firmVersion(struct libusb_device_handle *devh);
 
 void close_device(libusb_context *ctx, libusb_device_handle *devh) {
   libusb_close(devh);
@@ -214,7 +215,7 @@ libusb_device_handle* open_device(libusb_context *ctx) {
 void setup_optargs(struct option options[])
 {
   int fi;
-  for(fi=0;fi<OPTION_NUM-2;fi++)
+  for(fi=0;fi<OPTION_NUM-3;fi++)
   {
     options[fi].name = PLAOPTIONlist[fi];
     options[fi].has_arg = no_argument;
@@ -222,10 +223,14 @@ void setup_optargs(struct option options[])
     options[fi].val = 1;
   }
 
-  options[OPTION_NUM - 2].name = "version";
+  options[OPTION_NUM - 3].name = "version";
+  options[OPTION_NUM - 3].has_arg = no_argument;
+  options[OPTION_NUM - 3].flag = NULL;
+  options[OPTION_NUM - 3].val = 2;
+  options[OPTION_NUM - 2].name = "firmversion";
   options[OPTION_NUM - 2].has_arg = no_argument;
   options[OPTION_NUM - 2].flag = NULL;
-  options[OPTION_NUM - 2].val = 2;
+  options[OPTION_NUM - 2].val = 3;
   options[OPTION_NUM - 1].name = 0;
   options[OPTION_NUM - 1].has_arg = 0;
   options[OPTION_NUM - 1].flag = NULL;
@@ -262,6 +267,7 @@ void usage(char *fname) {
   fprintf(stderr, "  --Plarail_Speed_DownA\t\tこのオプションは必ず単独で指定します。\n");
   fprintf(stderr, "  --Plarail_Speed_DownB\t\tこのオプションは必ず単独で指定します。\n");
   fprintf(stderr, "  --version\n");
+  fprintf(stderr, "  --firmversion\n");
   fprintf(stderr, "※ getopt_longモジュールの制限を回避する為、プラレール用のオプションは末尾まで正確に指定して下さい。\n\n");
   fprintf(stderr, "使い方の例\n");
   fprintf(stderr, "受信系\n");
@@ -301,6 +307,7 @@ int main(int argc, char *argv[]) {
   int read_flag = 0;
   int stop_flag = 0;
   int get_flag = 0;
+  int firm_flag = 0;
   char *s;
   byte *data = NULL;
   uint dataCount = 0;
@@ -325,6 +332,9 @@ int main(int argc, char *argv[]) {
       case 2:
         version(argv[0]);
         exit(0);
+      case 3:
+        firm_flag = 1;
+        break;
       case 'd':
         data_flag = 1;
           while((s = strtok(optarg, ", ")) != NULL)
@@ -384,7 +394,7 @@ int main(int argc, char *argv[]) {
   }
 
 
-if((!type_flag)&&(!freq_flag)&&(!code_flag)&&(!Code_flag)&&(!data_flag)&&(!pla_flag)&&(!read_flag)&&(!stop_flag)&&(!get_flag))
+if((!type_flag)&&(!freq_flag)&&(!code_flag)&&(!Code_flag)&&(!data_flag)&&(!pla_flag)&&(!read_flag)&&(!stop_flag)&&(!get_flag)&&(!firm_flag))
 {
   usage(argv[0]);
   exit(1);
@@ -537,7 +547,7 @@ else if (get_flag)
         fprintf(stderr, "error %d\n", ret);
     else
     {
-        fprintf(stderr, "取得したbyte配列の要素数:%d\n", ibit_len*4);
+        fprintf(stderr, "取得したbyte配列の要素数:%d=%dビット分の生データ : Freq=%dHz\n", ibit_len*4, ibit_len, frequency);
         if(ibit_len>0)
         {
             for(fi=0;fi<ibit_len*4-1;fi++)
@@ -585,6 +595,11 @@ else if(pla_flag)
     default:
         break;
     }
+}
+else if (firm_flag)
+{
+    if((ret = firmVersion(devh))<0)
+        fprintf(stderr, "error %d\n", ret);
 }
 
 /* close device */
@@ -1193,8 +1208,8 @@ byte outbuffer[BUFF_SIZE];
 byte inbuffer[BUFF_SIZE];
 int BytesWritten = 0;
 int BytesRead = 0;
-const uint ir_read_stop_on_time = 0x0008;       // 読み込み停止 ON時間
-const uint ir_read_stop_off_time = 0x0474;      // 読み込み停止 OFF時間 30ms = 30ms / 38kHz = 1140 =0x474
+//const uint ir_read_stop_on_time = 0x0008;       // 読み込み停止 ON時間
+//const uint ir_read_stop_off_time = 0x0474;      // 読み込み停止 OFF時間 30ms = 30ms / 38kHz = 1140 =0x474
 
 // パラメータチェック
 if (devh != NULL && IR_FREQ_MIN <= freq && freq <= IR_FREQ_MAX)
@@ -1203,11 +1218,16 @@ if (devh != NULL && IR_FREQ_MIN <= freq && freq <= IR_FREQ_MAX)
     outbuffer[0] = 0x31;
     outbuffer[1] = (byte)((freq >> 8) & 0xFF);
     outbuffer[2] = (byte)(freq & 0xFF);
-    outbuffer[3] = 1;   // 読み込み停止フラグ　停止あり
-    outbuffer[4] = (byte)((ir_read_stop_on_time >> 8) & 0xFF);      // 読み込み停止ON時間MSB
-    outbuffer[5] = (byte)(ir_read_stop_on_time & 0xFF);             // 読み込み停止ON時間LSB
-    outbuffer[6] = (byte)((ir_read_stop_off_time >> 8) & 0xFF);     // 読み込み停止OFF時間MSB
-    outbuffer[7] = (byte)(ir_read_stop_off_time & 0xFF);            // 読み込み停止OFF時間LSB
+    outbuffer[3] = 0;
+    outbuffer[4] = 0;     // 読み込み停止ON時間MSB
+    outbuffer[5] = 0;     // 読み込み停止ON時間LSB
+    outbuffer[6] = 0;     // 読み込み停止OFF時間MSB
+    outbuffer[7] = 0;     // 読み込み停止OFF時間LSB
+//    outbuffer[3] = 1;   // 読み込み停止フラグ　停止あり
+//    outbuffer[4] = (byte)((ir_read_stop_on_time >> 8) & 0xFF);      // 読み込み停止ON時間MSB
+//    outbuffer[5] = (byte)(ir_read_stop_on_time & 0xFF);             // 読み込み停止ON時間LSB
+//    outbuffer[6] = (byte)((ir_read_stop_off_time >> 8) & 0xFF);     // 読み込み停止OFF時間MSB
+//    outbuffer[7] = (byte)(ir_read_stop_off_time & 0xFF);            // 読み込み停止OFF時間LSB
 
     if(libusb_interrupt_transfer(devh, BTO_EP_OUT, outbuffer, BUFF_SIZE ,&BytesWritten, 5000) == 0)
     {
@@ -1379,6 +1399,45 @@ if (devh != NULL)
             error_flag = true;
             i_ret = -3;
         }
+    }
+}
+else
+{   // パラメータエラー
+    i_ret = -2;
+}
+return i_ret;
+}
+
+int firmVersion(struct libusb_device_handle *devh)
+{
+int i_ret = -1;
+byte outbuffer[1];
+byte inbuffer[BUFF_SIZE];
+int BytesWritten = 0;
+int BytesRead = 0;
+
+// パラメータチェック
+if (devh != NULL)
+{
+    outbuffer[0] = 0x56;
+    if(libusb_interrupt_transfer(devh, BTO_EP_OUT, outbuffer, 1 ,&BytesWritten, 5000) == 0)
+    {
+        //Now get the response packet from the firmware.
+        if(libusb_interrupt_transfer(devh, BTO_EP_IN, inbuffer, BUFF_SIZE, &BytesRead, 5000) == 0)
+        {
+            fprintf(stdout, "Firmware version %5s\n", (char *)(inbuffer+1));
+            i_ret = 0;
+        }
+        else
+        {
+            // NG
+            i_ret = -4;
+        }
+        }
+        else
+    {
+        // NG
+        i_ret = -3;
     }
 }
 else

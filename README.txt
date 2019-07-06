@@ -36,6 +36,7 @@ usage: bto_advanced_USBIR_cmd <option>
   --Plarail_Speed_DownA        このオプションは必ず単独で指定します。
   --Plarail_Speed_DownB        このオプションは必ず単独で指定します。
   --version
+  --firmversion
 ※ getopt_longモジュールの制限を回避する為、プラレール用のオプションは末尾まで正確に指定して下さい。
 
 使い方の例

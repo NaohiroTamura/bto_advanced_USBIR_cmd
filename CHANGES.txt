@@ -1,0 +1,14 @@
+2017-11-11 disklessfun <disklessfun@gmail.com>
+
+	ポーティング元の、USB_IR_Remote_Controller_Advance_Library_v4.1.0.0 由来の、
+	赤外線のON時間、OFF時間を最長30msまでに制限する指定を解除
+
+	ファームウェアのバージョンを取得するオプションを追加
+
+=== bto_advanced_USBIR_cmd 1.0.1 ===
+
+2015-09-20 disklessfun <disklessfun@gmail.com>
+
+	新規公開
+
+=== bto_advanced_USBIR_cmd 1.0.0 ===
